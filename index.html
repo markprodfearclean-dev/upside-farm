@@ -18,7 +18,7 @@ canvas{display:block;width:min(100vw,calc(100vh*var(--ar)));height:auto;aspect-r
 // them changes, keeping the play state (sessionStorage). The game opens on its menu (keyboard + pointer); the attract demo remains only for ?render=1.
 // Dev keys: P pause, [ ] speed (0.1 / 0.25 / 0.5 / 1), . single step, Shift+R restart.
 // ?render=1 exposes window.__renderAt(t) for render.mjs (no loop, no polling).
-const STATIC = !!window.__STATIC__, V = STATIC ? 'v3' : Date.now();          // STATIC: packed build (no polling, no dev overlay, cacheable files)
+const STATIC = !!window.__STATIC__, V = STATIC ? 'v4' : Date.now();          // STATIC: packed build (no polling, no dev overlay, cacheable files)
 const load = (src) => new Promise((res, rej) => { const s = document.createElement('script'); s.src = src + '?v=' + V; s.onload = res; s.onerror = () => rej(new Error('failed ' + src)); document.head.appendChild(s); });
 (async () => {
   // sizes.js: window.SIZES (display size per sprite in view px, engine.md §7); audio.js: sound from the event bus (stub until used)
