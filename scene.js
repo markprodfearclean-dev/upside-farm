@@ -203,7 +203,7 @@ void main(){
     corrupt(0);
     // salt lines lie flat on the ground
     for (const p of ST.props) if (p.k === 'salt' && VIS(X(p.x))) spr('salt', X(p.x), Y(p.y + 40), SZ.salt, { u: { alpha: 0.35 + 0.65 * clamp(p.hp, 0, 1) }, sx: 1.05 });
-    if (play && !ST.panel && ST.tool === 'scythe' && ST.phase !== 'menu') { const cr = SIM.cellAt(ST.x, ST.y), pi = cr ? SIM.plotAt(cr[0], cr[1]) : -1;
+    if (play && !ST.panel && !ST.tut && ST.tool === 'scythe' && ST.phase !== 'menu') { const cr = SIM.cellAt(ST.x, ST.y), pi = cr ? SIM.plotAt(cr[0], cr[1]) : -1;
       if (pi >= 0 && SIM.owned(ST, pi)) { const P = SIM.PLOTS[pi]; L.ring(X(P.x), Y(P.y + 6), 74, 60, [1, 0.95, 0.7], 0.35 + 0.2 * ST.press, 0.05); } }
     // y-sorted world
     const items = [];
@@ -428,6 +428,7 @@ void main(){
       if (e.k === 'research') banner('Изучено', SIM.RESEARCH.find((r) => r.id === e.id).name, k, '#b8f0a8'); }
     if (ST.panel) drawBook(ST, play);
     if (ST.phase === 'won' || ST.phase === 'lost') endScreen(ST, GT);
+    if (ST.tut) tutorial(ST, GT, play);
     if (play) drawCursor(ST, GT, t);
   }
   function minimap(ST, t) {
@@ -517,6 +518,43 @@ void main(){
     L.label('keys', SIM.HINT, 960, 840, { size: 22, al: 0.5, col: '#bfae90' });
     if (play) { L.glow(ST.sx, ST.sy, 20, [1, 0.95, 0.8], 0.5, 2.5); L.ring(ST.sx, ST.sy, 12, 12, [1, 1, 1], 0.9, 0.2); }
   }
+  const TUT = [
+    { title: 'День: сажай и продавай', col: '#ffe2a0', items: [
+      ['ic_seed', 56, 'Клик по пустой грядке — посадить.', 'Семена внизу или клавиши 1–8.'],
+      ['scythe', 64, 'Спелое срезай косой: зажми левую', 'кнопку и веди по грядкам.'],
+      ['ic_coin', 56, 'Урожай сам летит в тележку', 'и даёт монеты и опыт.'],
+      ['ic_book', 56, 'Опыт тратится в книге (B),', 'монеты — на стройку (Q).']] },
+    { title: 'Опасность: разлом справа', col: '#ffb0a8', items: [
+      ['ic_skull', 56, 'Красный разлом стоит на правом', 'краю карты. На мини-карте это', 'красная точка.'],
+      ['mob_body', 64, 'Ночью от него к огороду ползёт', 'зараза и идут твари: они едят', 'урожай и заражают грядки.'],
+      ['ev_bloodmoon', 56, 'На 6-й и 14-й ночи откроются новые', 'разломы: слева и на севере.'],
+      ['', 0, 'Смотреть по сторонам: A/D', 'или мышь у края экрана.']] },
+    { title: 'Ночь: свети фонариком', col: '#ffe2a0', items: [
+      ['flashlight', 26, 'Правая кнопка или Пробел — фонарик:', 'жжёт заразу и гонит тварей.', 'Заряд кончается: следи за полоской.'],
+      ['medicine', 60, 'Заражённую грядку лечит', 'лекарство: клавиша M, 1 алмаз.'],
+      ['lamp', 90, 'Столбы и прожекторы светят сами:', 'изучи их в книге и построй.'],
+      ['ic_skull', 56, null, 'Продержись 20 ночей.']] }];
+  function tutorial(ST, GT, play) {
+    const p = ST.tut, [x, y, w, h] = SIM.tutCard(p), P = TUT[p - 1], bob = 7 * Math.sin(GT * 5), PO = SIM.PORTALS[0];
+    L.rrect(0, 0, W, H, 0, [0, 0, 0], [0, 0, 0], 0.22);
+    panel('tutp', x, y, w, h, { r: 24, a: 0.97, c0: p === 2 ? [0.34, 0.1, 0.1] : [0.2, 0.16, 0.11], c1: [0.09, 0.07, 0.08] });
+    L.label('tutn', `Шаг ${p} из ${SIM.TUT_PAGES}`, x + 34, y + 40, { size: 22, col: '#bfae90' });
+    L.label('tutt' + p, P.title, x + 34, y + 88, { size: 38, col: P.col });
+    let ly = y + 146;
+    P.items.forEach((it, i) => { const lines = it.slice(2).map((s) => s === null ? `Заражено ${SIM.loseAt(ST)} из ${SIM.ownedCount(ST)} грядок — поражение.` : s), rowH = lines.length * 33;
+      if (it[0]) icon(it[0], x + 62, ly + rowH / 2 - 16, it[1]);
+      lines.forEach((s, j) => L.label(`tutl${p}_${i}_${j}`, s, x + 112, ly + j * 33, { size: 24 }));
+      ly += rowH + 26; });
+    const btn = (id, r, txt, c0, col) => { const hov = play && ST.sx > r[0] && ST.sx < r[0] + r[2] && ST.sy > r[1] && ST.sy < r[1] + r[3];
+      panel(id, r[0], r[1], r[2], r[3], { r: 29, c0: hov ? [0.5, 0.36, 0.2] : c0, c1: [0.1, 0.08, 0.08] }); L.label(id, txt, r[0] + r[2] / 2, r[1] + r[3] / 2, { size: 26, al: 0.5, col }); };
+    if (p < SIM.TUT_PAGES) btn('tutskip', SIM.tutSkip(p), 'Пропустить', [0.16, 0.13, 0.12], '#bfae90');
+    btn('tutnext' + p, SIM.tutNext(p), p < SIM.TUT_PAGES ? 'Дальше ▶' : 'Играть ▶', [0.42, 0.28, 0.12], '#ffe2a0');
+    const mark = (id, s, mx, my) => { L.label('tutm' + id, s, mx, my - 44, { size: 28, al: 0.5, col: '#ffe2a0' }); L.label('tuta' + id, '▼', mx, my + bob, { size: 30, al: 0.5, col: '#ffe2a0' }); };
+    if (p === 1) { const s = SIM.slotRect(0), [cx, cy] = SIM.cellXY(SIM.SECTS[0].c0 + 1.5, 1); mark('seed', 'Семена', s[0] + s[2] / 2, s[1] - 26); mark('cart', 'Тележка', SIM.CART.x - ST.cam, SIM.CART.y - 165); mark('beds', 'Огород', cx - ST.cam, cy - 96); }
+    if (p === 2) { const rx = PO.x - ST.cam, [mx, my, mw, mh] = SIM.MAP; L.label('tutmr', 'Разлом Изнанки', rx - 330, PO.y - 150, { size: 34, al: 0.5, col: '#ffb0a8' }); L.label('tutar', '▶', rx - 170 + bob, PO.y - 150, { size: 34, al: 0.5, col: '#ffb0a8' });
+      L.ring(mx + PO.x * mw / WW, my + (PO.y - 80) * mh / H, 24, 24, [1, 0.8, 0.7], 0.6 + 0.3 * Math.sin(GT * 5), 0.12); }
+    if (p === 3) { mark('bat', 'Заряд', 1814, 930); mark('hand', 'Фонарик', SIM.HAND.x - 40, 960); }
+  }
   function endScreen(ST, GT) { const k = SS(0, 0.8, ST.pt), won = ST.phase === 'won';
     L.rrect(0, 0, W, H, 0, [0, 0, 0], [0, 0, 0], 0.5 * k);
     panel('end', 500, 230, 920, 520, { a: 0.95 * k, r: 26, c0: won ? [0.2, 0.3, 0.18] : [0.34, 0.1, 0.1] });
@@ -526,7 +564,7 @@ void main(){
     lines.forEach((ln, i) => L.label('endL' + i, ln, 960, 380 + i * 46, { size: 28, al: 0.5, a: k }));
     L.label('endR', 'Клик — в меню', 960, 690, { size: 28, al: 0.5, col: '#ffe2a0', a: k * (0.6 + 0.4 * Math.sin(GT * 4)) }); }
   function drawCursor(ST, GT, t) {
-    const x = ST.sx, y = ST.sy, overUI = ST.panel || y > SIM.SLOT.y - 20 || y < 130 || (ST.menu && y > SIM.SLOT.y - 130), tool = overUI || ST.phase === 'won' || ST.phase === 'lost' ? 'ui' : ST.tool;
+    const x = ST.sx, y = ST.sy, overUI = ST.panel || ST.tut || y > SIM.SLOT.y - 20 || y < 130 || (ST.menu && y > SIM.SLOT.y - 130), tool = overUI || ST.phase === 'won' || ST.phase === 'lost' ? 'ui' : ST.tool;
     if (tool === 'ui') { L.glow(x, y, 20, [1, 0.95, 0.8], 0.5, 2.5); L.ring(x, y, 12, 12, [1, 1, 1], 0.9, 0.2); return; }
     if (tool === 'scythe') { const cr = SIM.cellAt(ST.x, ST.y), si = cr ? SIM.secAt(cr[0], cr[1]) : -1;
       if (si >= 0 && !ST.sec[si]) { const s = 'Купить участок: ' + SIM.SECTS[si].price, w = 30 + L.labelW('buytip', s, { size: 24 }); panel('buytip', x + 24, y + 10, w, 40); L.label('buytip', s, x + 39, y + 30, { size: 24, col: ST.coins >= SIM.SECTS[si].price ? '#ffe2a0' : '#d8a898' }); }
@@ -567,7 +605,8 @@ void main(){
       s.plots.forEach((p, i) => { if (SIM.owned(s, i)) { const c = [5, 3, 7, 5][i % 4]; p.crop = c; p.g = SIM.CROPS[c].grow; p.gold = c === 7 ? 1 : 0; } }); return s; };
     const fog = () => Object.assign(night(), { event: 'fog' }), blood = () => Object.assign(night(), { event: 'bloodmoon' });
     const NF = 16, CYC = 2 * STEP, walk = []; for (let i = 0; i < NF; i++) { const s = SIM.demoStart(); s.mobs = [mob(1, s.cam + 1300 - i * CYC / NF, 640, { dist: i * CYC / NF, ph: 0.3 })]; walk.push(s); }
-    return { states: [['start', base()], ['menu', menuS()], ['night', night()], ['monsters', monsters()], ['props', props()], ['fog', fog()], ['blood', blood()], ['book', book()], ['buildmenu', bmenu()],
+    const tutS = (p) => { const s = Object.assign(base(), { tut: p, sx: 1000, sy: 500 }); if (p === 2) s.cam = SIM.WORLD.W - W; return s; };
+    return { states: [['start', base()], ['menu', menuS()], ['tut1', tutS(1)], ['tut2', tutS(2)], ['tut3', tutS(3)], ['night', night()], ['monsters', monsters()], ['props', props()], ['fog', fog()], ['blood', blood()], ['book', book()], ['buildmenu', bmenu()],
         ['lost', lost()], ['won', won()], ['toast', toastS()], ['beam', beam(1300, 400)()], ['beamFar', beam(200, 200)()], ['beamLow', beam(1500, 900)()], ['match', beam(1500, 640)()]],
       cycles: { mobWalk: walk }, sprites: { mobWalk: ['mob_body', 'mob_arm', 'mob_leg'] }, subject: { mobWalk: 'mob1' }, actors: ['mobWalk'], cycleT: { mobWalk: CYC / 74 },
       box: (n, s) => [1000, 380, 420, 320] };

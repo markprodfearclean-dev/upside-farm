@@ -105,6 +105,8 @@
   const cardRect = (i) => { const col = i % 6, row = Math.floor(i / 6), w = 196, h = 160; return [PANEL.x + 18 + col * (w + 8), PANEL.y + 92 + row * (h + 10), w, h]; };
   const CLOSE = [PANEL.x + PANEL.w - 74, PANEL.y + 18, 56, 56];
   const modeRect = (i) => [960 - 3 * 190 / 2 - 20 + i * 210, 560, 190, 200];
+  const VIEW_CAM0 = 885, TUT_PAGES = 3, tutCard = (p) => [p === 2 ? 40 : 1270, 180, 610, 690];          // the card stands aside from what its page shows
+  const tutSkip = (p) => { const [x, y, , h] = tutCard(p); return [x + 30, y + h - 84, 210, 58]; }, tutNext = (p) => { const [x, y, w, h] = tutCard(p); return [x + w - 250, y + h - 84, 220, 58]; };
   const inR = (x, y, r) => x >= r[0] && x <= r[0] + r[2] && y >= r[1] && y <= r[1] + r[3];
 
   // ---------------------------------------------------------------- state
@@ -376,20 +378,30 @@
   }
   const infectedPlots = (S) => PLOTS.reduce((n, P, i) => n + (owned(S, i) && S.flag[P.r * NC + P.c] ? 1 : 0), 0);
 
+  // ---------------------------------------------------------------- tutorial: page 2 flies the camera to the right rift
+  function tutorStep(S, inp) {
+    const home = VIEW_CAM0, end = () => { S.tut = 0; S.cam = home; S.x = S.sx + S.cam; S.drag = 'ui'; S.press = inp.press ? 1 : 0; say(S, 'ui', S.x, S.y); };
+    S.cam += ((S.tut === 2 ? WORLD.W - VIEW.W : home) - S.cam) * Math.min(1, DT * 5); S.x = S.sx + S.cam; S.y = S.sy;
+    let next = inp.click && !inR(S.sx, S.sy, tutSkip(S.tut)), skip = inp.click && !next;
+    for (const k of inp.kp || []) { if (k === 'Escape') skip = true; if (k === 'Enter' || k === 'Space' || k === 'ArrowRight') next = true; }
+    if (skip) end(); else if (next) { if (S.tut >= TUT_PAGES) end(); else { S.tut++; say(S, 'ui', S.x, S.y); } }
+  }
+
   // ---------------------------------------------------------------- step
   function step(S, inp) {
     const t = S.t + DT;
     // camera and pointer: screen px from the page, or world px from the bot
     if (inp.wx !== undefined) { S.x = inp.wx; S.y = inp.wy; S.cam = clamp(inp.cam !== undefined ? inp.cam : S.x - VIEW.W / 2, 0, WORLD.W - VIEW.W); S.sx = S.x - S.cam; S.sy = S.y; }
     else { if (inp.px !== undefined) { S.sx = inp.px; S.sy = inp.py; }
-      const pan = (inp.right ? 1 : 0) - (inp.left ? 1 : 0) + (S.phase !== 'menu' && !S.panel && inp.px !== undefined && S.sy > 120 && S.sy < SLOT.y - 130 ? (S.sx > VIEW.W - 26 ? 1 : S.sx < 26 ? -1 : 0) : 0);
+      const pan = (inp.right ? 1 : 0) - (inp.left ? 1 : 0) + (S.phase !== 'menu' && !S.panel && !S.tut && inp.px !== undefined && S.sy > 120 && S.sy < SLOT.y - 130 ? (S.sx > VIEW.W - 26 ? 1 : S.sx < 26 ? -1 : 0) : 0);
       if (pan && !S.panel) S.cam = clamp(S.cam + pan * 1500 * DT, 0, WORLD.W - VIEW.W);
       S.x = S.sx + S.cam; S.y = S.sy; }
-    for (const k of inp.kp || []) { const d = /^Digit([1-8])$/.exec(k); if (d) command(S, 'seed' + (+d[1] - 1), S.x, S.y);
+    for (const k of S.tut ? [] : inp.kp || []) { const d = /^Digit([1-8])$/.exec(k); if (d) command(S, 'seed' + (+d[1] - 1), S.x, S.y);
       if (k === 'KeyB' || k === 'Tab') command(S, 'book', S.x, S.y); if (k === 'KeyQ') command(S, 'build', S.x, S.y); if (k === 'KeyG') command(S, 'gun', S.x, S.y);
       if (k === 'KeyM') command(S, 'med', S.x, S.y); if (k === 'KeyN') command(S, 'night', S.x, S.y); if (k === 'Escape') { S.menu = 0; S.panel = 0; if (S.tool !== 'scythe') S.tool = 'scythe'; } }
     if (inp.cmd) command(S, inp.cmd, S.x, S.y);
-    if (S.phase === 'menu') { if (inp.click) { const u = uiHit(S, S.sx, S.sy); if (u && u !== 'none') command(S, u, S.x, S.y); } S.t = t; S.steps++; return S; }
+    if (S.phase === 'menu') { if (inp.click) { const u = uiHit(S, S.sx, S.sy); if (u && u !== 'none') { command(S, u, S.x, S.y); S.tut = 1; } } S.t = t; S.steps++; return S; }   // a player's click opens the tutorial, a bot's cmd skips it
+    if (S.tut) { tutorStep(S, inp); S.t = t; S.steps++; return S; }                    // the world waits while the tutorial is open
     if (S.phase === 'won' || S.phase === 'lost') { S.pt += DT; S.beam = 0; S.t = t; S.steps++;
       if (inp.click && S.pt > 1.2) { const n = Object.assign(create((S.rs & 0xffff) + 1), { phase: 'menu', wt0: S.wt0 || 0 }); for (const k of Object.keys(S)) delete S[k]; Object.assign(S, n); }
       return S; }
@@ -550,7 +562,7 @@
   const demoCheck = (S) => S.stats.harvest >= 8 && S.stats.scared + S.stats.killed >= 1 && S.phase !== 'lost';
   const HINT = 'ЛКМ — коса, ПКМ / Пробел — фонарик, A/D — камера, 1–8 семена, Q — стройка, B — книга, N — ночь, O — звук';
 
-  root.SIM = { DT, L, VIEW, WORLD, HINT, NC, NR, CW, CH, FX0, FY0, SECTS, PLOTS, PORTALS, CART, HAND, CROPS, RESEARCH, KINDS, MODES, WAVES, BAL,
+  root.SIM = { DT, L, VIEW, WORLD, HINT, TUT_PAGES, tutCard, tutSkip, tutNext, NC, NR, CW, CH, FX0, FY0, SECTS, PLOTS, PORTALS, CART, HAND, CROPS, RESEARCH, KINDS, MODES, WAVES, BAL,
     SLOTS, SLOT, BUILDS, NIGHT_BTN, GEM_BTN, MAP, PANEL, CLOSE, cellXY, cellAt, plotAt, secAt, isCore, slotRect, menuRect, cardRect, modeRect,
     lights, lightAt, searchAng, torchR, torchLvl, priceOf, has, cropUnlocked, infectedPlots, ownedCount, loseAt, owned, portalOpen, propOn, powered, buildable, uiHit, sellPoint,
     create, spawn, step, at, scriptInput, botInput, demoStart, demoCheck };

@@ -15,10 +15,10 @@ canvas{display:block;width:min(100vw,calc(100vh*var(--ar)));height:auto;aspect-r
 <script>window.__STATIC__ = 1;</script>
 <script>
 // LIVE PREVIEW. Scripts and images load with a cache-buster; the page polls its sources and reloads itself when any of
-// them changes, keeping the play state (sessionStorage). Attract demo until a key or click, then play (keyboard + pointer).
-// Dev keys: P pause, [ ] speed (0.1 / 0.25 / 0.5 / 1), . single step, Esc back to the demo, R restart.
+// them changes, keeping the play state (sessionStorage). The game opens on its menu (keyboard + pointer); the attract demo remains only for ?render=1.
+// Dev keys: P pause, [ ] speed (0.1 / 0.25 / 0.5 / 1), . single step, Shift+R restart.
 // ?render=1 exposes window.__renderAt(t) for render.mjs (no loop, no polling).
-const STATIC = !!window.__STATIC__, V = STATIC ? 'v2' : Date.now();          // STATIC: packed build (no polling, no dev overlay, cacheable files)
+const STATIC = !!window.__STATIC__, V = STATIC ? 'v3' : Date.now();          // STATIC: packed build (no polling, no dev overlay, cacheable files)
 const load = (src) => new Promise((res, rej) => { const s = document.createElement('script'); s.src = src + '?v=' + V; s.onload = res; s.onerror = () => rej(new Error('failed ' + src)); document.head.appendChild(s); });
 (async () => {
   // sizes.js: window.SIZES (display size per sprite in view px, engine.md §7); audio.js: sound from the event bus (stub until used)
@@ -42,16 +42,18 @@ const load = (src) => new Promise((res, rej) => { const s = document.createEleme
     if (sv) { simT = sv.simT; speed = sv.speed; paused = sv.paused; if (sv.play) { play = Object.assign(SIM.create(), sv.play); hint.style.opacity = 0; }
       flash.style.opacity = 1; setTimeout(() => (flash.style.opacity = 0), 1200); } } catch (e) {}
   const save = () => { try { sessionStorage.setItem('live', JSON.stringify({ simT, speed, paused, play })); } catch (e) {} };
+  const newGame = () => { play = SIM.spawn(Date.now() / 1000 % 9973); hint.style.opacity = 0; };   // the seed comes from the clock
+  if (!play) newGame();                                                                     // the game opens on the difficulty menu, no attract demo
   addEventListener('keydown', (e) => {
     const c = e.code;
     if (c === 'KeyP') { paused = !paused; e.preventDefault(); return; }
     if (c === 'Period') { stepOnce = true; paused = true; e.preventDefault(); return; }
     if (c === 'BracketLeft') { speed = SPEEDS[Math.max(0, SPEEDS.indexOf(speed) - 1)]; return; }
     if (c === 'BracketRight') { speed = SPEEDS[Math.min(SPEEDS.length - 1, SPEEDS.indexOf(speed) + 1)]; return; }
-    if (c === 'Escape') { play = null; SCENE.state = null; hint.style.opacity = 1; return; }
+    if (c === 'Escape') { pend.kp.push(c); e.preventDefault(); return; }                     // Esc closes panels and skips the tutorial, the sim handles it
     keys[c] = 1;
     pend.kp.push(c); const dg = /^Digit(\d)$/.exec(c); if (dg) pend.slot = +dg[1] || 10;                     // 1–9, 0 → inp.slot (hotbars)
-    if (!play || (c === 'KeyR' && e.shiftKey)) { play = SIM.spawn(simT); hint.style.opacity = 0; }
+    if (c === 'KeyR' && e.shiftKey) newGame();
     e.preventDefault();
   });
   addEventListener('keyup', (e) => { keys[e.code] = 0; });
@@ -61,7 +63,7 @@ const load = (src) => new Promise((res, rej) => { const s = document.createEleme
   addEventListener('contextmenu', (e) => e.preventDefault());
   const toView = (e) => { const r = cv.getBoundingClientRect(); ptr.x = (e.clientX - r.left) / r.width * VW; ptr.y = (e.clientY - r.top) / r.height * VH; };
   addEventListener('pointermove', toView);
-  addEventListener('pointerdown', (e) => { toView(e); if (e.button === 2) { ptr.rdown = 1; if (!play) { play = SIM.spawn(simT); hint.style.opacity = 0; } return; } ptr.down = 1; ptr.click = 1; if (!play) { play = SIM.spawn(simT); hint.style.opacity = 0; } });
+  addEventListener('pointerdown', (e) => { toView(e); if (e.button === 2) { ptr.rdown = 1; return; } ptr.down = 1; ptr.click = 1; });
   addEventListener('pointerup', (e) => { if (e.button === 2) ptr.rdown = 0; else ptr.down = 0; });
   let last = performance.now(), fpsAcc = 0, fpsN = 0;
   const loop = () => {
@@ -79,7 +81,7 @@ const load = (src) => new Promise((res, rej) => { const s = document.createEleme
     } else SCENE.state = null;
     try { SCENE.render(simT); } catch (e) { if (!window.__renderErr) { window.__renderErr = e; console.error(e); } }   // log once, keep the loop alive
     if (!STATIC) dev.style.display = (paused || speed !== 1 || q.has('dev')) ? 'block' : 'none';   // debug line only when paused / slowed or with ?dev
-    if (!STATIC) dev.textContent = `LIVE  ${play ? 'play' : 'demo'}  ${paused ? 'PAUSED' : speed + '×'}  ${fps.toFixed(0)} fps   P pause  [ ] speed  . step  Esc demo  R restart`;
+    if (!STATIC) dev.textContent = `LIVE  ${play ? 'play' : 'demo'}  ${paused ? 'PAUSED' : speed + '×'}  ${fps.toFixed(0)} fps   P pause  [ ] speed  . step  Shift+R restart`;
     requestAnimationFrame(loop);
   };
   loop();
